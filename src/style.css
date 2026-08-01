@@ -176,6 +176,30 @@ output {
 .play-panel {
   min-width: 0;
 }
+.visual-debug {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.9rem;
+  margin: 0 0 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #385244;
+  border-radius: 0.65rem;
+  color: #c9d8ca;
+  font-size: 0.78rem;
+}
+.visual-debug legend {
+  padding: 0 0.3rem;
+  color: #aad78c;
+  font-weight: 800;
+}
+.visual-debug label {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+.visual-debug input {
+  accent-color: #b9f47a;
+}
 .shooting-canvas {
   display: block;
   width: 100%;
@@ -206,6 +230,10 @@ output {
   font-weight: 800;
   cursor: pointer;
 }
+.play-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 .play-actions p {
   margin: 0;
   color: #aebaae;
@@ -213,6 +241,9 @@ output {
 }
 .result-panel {
   overflow-wrap: anywhere;
+}
+.result-panel h2 {
+  font-size: 1.25rem;
 }
 .result-panel dl {
   display: grid;
@@ -244,9 +275,14 @@ output {
   font-size: 0.72rem;
 }
 .outcome {
-  margin: 0 0 1rem;
-  font-size: 1.5rem;
+  margin: 0.6rem 0 1rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid currentColor;
+  border-radius: 0.45rem;
+  font-size: 1.35rem;
   font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
   text-transform: uppercase;
 }
 .outcome-goal {

@@ -6,6 +6,14 @@ Le laboratoire `/dev/minigames` est un test manuel Canvas 2D, sans carrière. La
 
 Un scénario possède une géométrie indépendante du Canvas : position de départ du ballon, position initiale du gardien et positions de défenseurs. Ainsi, l’angle fermé est réellement décalé et son gardien couvre le premier poteau ; le défenseur au contact coupe une trajectoire ; l’action sous fatigue reprend la géométrie centrale pour isoler l’effet du contexte.
 
+## Lisibilité du playtest
+
+Le laboratoire emploie volontairement une représentation abstraite de tableau tactique : tireur bleu, gardien orange, défenseur gris et ballon blanc sont des pions circulaires. Ce n’est pas la direction artistique finale ; cette passe privilégie la compréhension instantanée du placement et de l’issue.
+
+Le but, sa surface et le premier poteau à angle fermé sont explicitement dessinés. Avant le tir, la ligne pointillée, une cible projetée, la jauge de puissance et le timing restent visibles directement dans la scène. Après le tir, le résultat est figé et libellé en français.
+
+Les aides visuelles du laboratoire sont activées par défaut et peuvent être masquées individuellement : trajectoire du ballon, déplacement du gardien, interception, bloc et zone visée. Elles permettent de comparer la résolution au rendu sans modifier le moteur.
+
 ## Contrôles et états
 
 Le pointeur presse le ballon, glisse, puis relâche. Direction, longueur et durée sont converties en `ShotInput`; un geste trop court est annulé. `pointercancel` annule également sans tirer. Une seule capture active est acceptée.
@@ -22,8 +30,10 @@ Les streams déterministes sont nommés séparément pour les erreurs horizontal
 
 Les issues sont `goal`, `saved`, `blocked`, `post` et `off-target`. Le résultat contient point d’interception, point de bloc et rebond de poteau si nécessaire. L’animation est exclusivement construite à partir de ces données : but dans le filet, arrêt à l’interception, bloc au défenseur, poteau puis rebond, hors cadre au-delà du but. `prefers-reduced-motion` raccourcit l’animation.
 
+Le gardien part toujours de sa position de départ. Sa trace et sa destination rendent visible une lecture correcte, une mauvaise direction ou une portée insuffisante ; lors d’un arrêt, il termine au point d’interception. Cette lisibilité est prioritaire sur tout rendu humanoïde.
+
 ## Calibration et limites
 
 `npm run simulate:shots` fournit un balayage aléatoire de 10 000 frappes et une matrice contrôlée (gestes mauvais/moyen/bon/excellent × tir 48/70/88 × scénarios). Elle affiche les issues, qualité, bonnes lectures et mauvais côtés du gardien. Elle sert à observer une hiérarchie, pas à décider de l’équilibre final.
 
-Restent ouverts : style visuel, seuils précis du gardien et des blocs, poids finaux, nombre final de Moments, équilibre humain/attributs et sensations tactiles réelles.
+Restent ouverts : style visuel final, caméra, intensité des aides visuelles, niveau de minimalisme, seuils précis du gardien et des blocs, poids finaux, nombre final de Moments, équilibre humain/attributs et sensations tactiles réelles.

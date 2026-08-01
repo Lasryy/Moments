@@ -5,6 +5,7 @@ import {
   pointerGestureToShotInput,
 } from './shotControls'
 import type { KeyboardAim } from './shotControls'
+import type { KeyboardEvent, PointerEvent } from 'react'
 import type {
   NormalizedPoint,
   ShotInput,
@@ -12,6 +13,13 @@ import type {
   ShotScenario,
 } from '../../../moments/shooting/types'
 
+export interface VisualDebugOptions {
+  readonly ballPath: boolean
+  readonly goalkeeperPath: boolean
+  readonly interception: boolean
+  readonly blockPoint: boolean
+  readonly target: boolean
+}
 interface ShootingCanvasProps {
   readonly scenario: ShotScenario
   readonly aim: ShotInput | null
@@ -20,14 +28,25 @@ interface ShootingCanvasProps {
     readonly resolution: ShotResolution
   } | null
   readonly animationKey: number
+  readonly debug: VisualDebugOptions
   readonly onAimChange: (input: ShotInput | null) => void
   readonly onShot: (input: ShotInput) => void
 }
 const WIDTH = 800
 const HEIGHT = 500
-const pointToPixels = (point: NormalizedPoint): NormalizedPoint => ({
+const GOAL = { left: 92, right: 708, top: 42, bottom: 352 }
+const clamp = (value: number): number => Math.min(1, Math.max(0, value))
+const toPixels = (point: NormalizedPoint): NormalizedPoint => ({
   x: point.x * WIDTH,
   y: point.y * HEIGHT,
+})
+const interpolate = (
+  from: NormalizedPoint,
+  to: NormalizedPoint,
+  progress: number,
+): NormalizedPoint => ({
+  x: from.x + (to.x - from.x) * progress,
+  y: from.y + (to.y - from.y) * progress,
 })
 
 export const ShootingCanvas = ({
@@ -35,6 +54,7 @@ export const ShootingCanvas = ({
   aim,
   completedShot,
   animationKey,
+  debug,
   onAimChange,
   onShot,
 }: ShootingCanvasProps) => {
@@ -70,7 +90,7 @@ export const ShootingCanvas = ({
       performance.now() - startedAt,
       { width: 1, height: 1 },
     )
-  const cancelPointer = (event?: React.PointerEvent<HTMLCanvasElement>) => {
+  const cancelPointer = (event?: PointerEvent<HTMLCanvasElement>): void => {
     const pointer = activePointer.current
     if (!pointer || (event && pointer.id !== event.pointerId)) return
     if (event?.currentTarget.hasPointerCapture(pointer.id))
@@ -78,7 +98,7 @@ export const ShootingCanvas = ({
     activePointer.current = null
     onAimChange(null)
   }
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>): void => {
     if (activePointer.current) return
     const point = eventPoint(event)
     const ball = scenario.geometry.ballStart
@@ -91,12 +111,12 @@ export const ShootingCanvas = ({
     }
     onAimChange(null)
   }
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>): void => {
     const pointer = activePointer.current
     if (!pointer || pointer.id !== event.pointerId) return
     onAimChange(updatePointerAim(eventPoint(event), pointer.startedAt))
   }
-  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerUp = (event: PointerEvent<HTMLCanvasElement>): void => {
     const pointer = activePointer.current
     if (!pointer || pointer.id !== event.pointerId) return
     const input = updatePointerAim(eventPoint(event), pointer.startedAt)
@@ -104,18 +124,16 @@ export const ShootingCanvas = ({
     if (input) onShot(input)
   }
   const updateKeyboardPreview = useCallback(
-    (nextAim: KeyboardAim, elapsedMs: number) => {
-      const preview = keyboardShotInput(nextAim, elapsedMs)
-      onAimChange(preview)
-    },
+    (nextAim: KeyboardAim, elapsedMs: number): void =>
+      onAimChange(keyboardShotInput(nextAim, elapsedMs)),
     [onAimChange],
   )
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLCanvasElement>): void => {
     if (event.key.startsWith('Arrow')) {
-      const nextAim = moveKeyboardAim(keyboardAim, event.key)
-      setKeyboardAim(nextAim)
+      const next = moveKeyboardAim(keyboardAim, event.key)
+      setKeyboardAim(next)
       updateKeyboardPreview(
-        nextAim,
+        next,
         chargeStartedAt.current === null
           ? 480
           : performance.now() - chargeStartedAt.current,
@@ -130,7 +148,7 @@ export const ShootingCanvas = ({
       event.preventDefault()
     }
   }
-  const handleKeyUp = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+  const handleKeyUp = (event: KeyboardEvent<HTMLCanvasElement>): void => {
     if (event.key !== ' ' || chargeStartedAt.current === null) return
     const input = keyboardShotInput(
       keyboardAim,
@@ -145,7 +163,7 @@ export const ShootingCanvas = ({
   useEffect(() => {
     if (!isKeyboardCharging) return
     let frame = 0
-    const update = (now: number) => {
+    const update = (now: number): void => {
       if (chargeStartedAt.current !== null) {
         updateKeyboardPreview(keyboardAim, now - chargeStartedAt.current)
         frame = requestAnimationFrame(update)
@@ -162,9 +180,9 @@ export const ShootingCanvas = ({
       '(prefers-reduced-motion: reduce)',
     ).matches
     const startedAt = performance.now()
-    const duration = completedShot ? (reducedMotion ? 1 : 650) : 0
+    const duration = completedShot ? (reducedMotion ? 1 : 950) : 0
     let frame = 0
-    const render = (now: number) => {
+    const render = (now: number): void => {
       const progress =
         duration === 0 ? 0 : Math.min(1, (now - startedAt) / duration)
       drawScene(
@@ -173,12 +191,13 @@ export const ShootingCanvas = ({
         aim,
         completedShot?.resolution ?? null,
         progress,
+        debug,
       )
       if (progress < 1) frame = requestAnimationFrame(render)
     }
     render(startedAt)
     return () => cancelAnimationFrame(frame)
-  }, [scenario, aim, completedShot, animationKey])
+  }, [scenario, aim, completedShot, animationKey, debug])
   return (
     <canvas
       ref={canvasRef}
@@ -204,154 +223,327 @@ const drawScene = (
   aim: ShotInput | null,
   resolution: ShotResolution | null,
   progress: number,
+  debug: VisualDebugOptions,
 ): void => {
-  context.clearRect(0, 0, WIDTH, HEIGHT)
-  context.fillStyle = '#1a5539'
-  context.fillRect(0, 0, WIDTH, HEIGHT)
-  context.strokeStyle = '#e7f2db'
-  context.lineWidth = 5
-  context.strokeRect(92, 32, 616, 360)
-  context.strokeStyle = 'rgba(231,242,219,.28)'
-  context.lineWidth = 1
-  for (let x = 120; x < 700; x += 38) {
-    context.beginPath()
-    context.moveTo(x, 32)
-    context.lineTo(x, 392)
-    context.stroke()
-  }
-  for (let y = 58; y < 392; y += 36) {
-    context.beginPath()
-    context.moveTo(92, y)
-    context.lineTo(708, y)
-    context.stroke()
-  }
+  drawPitch(context, scenario)
   const ballStart = scenario.geometry.ballStart
-  const goalkeeperPosition = goalkeeperAtProgress(
+  const goalkeeperPath = resolveGoalkeeperPath(
     resolution,
-    progress,
     scenario.geometry.goalkeeperStart,
   )
-  drawPerson(
-    context,
-    goalkeeperPosition.x * WIDTH,
-    goalkeeperPosition.y * HEIGHT,
-    '#f0a74c',
-    18,
-  )
+  if (debug.goalkeeperPath && resolution)
+    drawPath(
+      context,
+      goalkeeperPath.start,
+      goalkeeperPath.end,
+      '#ffb258',
+      [6, 5],
+    )
+  if (debug.ballPath && resolution)
+    drawPath(
+      context,
+      ballStart,
+      animationDestination(resolution),
+      '#f7fbff',
+      [5, 6],
+    )
+  if (aim) drawAim(context, ballStart, aim, debug.target)
+  if (debug.interception && resolution?.goalkeeperDecision.interceptionPoint)
+    drawMarker(
+      context,
+      resolution.goalkeeperDecision.interceptionPoint,
+      '#ffb258',
+      'INTERCEPTION',
+    )
+  if (debug.blockPoint && resolution?.defenderBlockPoint)
+    drawMarker(context, resolution.defenderBlockPoint, '#c5ced7', 'BLOC')
   for (const defender of scenario.geometry.defenderPositions)
-    drawPerson(context, defender.x * WIDTH, defender.y * HEIGHT, '#d0d8eb', 15)
-  drawPerson(
-    context,
-    ballStart.x * WIDTH - 42,
-    ballStart.y * HEIGHT + 22,
-    '#283b7a',
-    17,
+    drawToken(context, defender, '#8e9aa7', '#d7dfe7', 'D')
+  const goalkeeperPosition = interpolate(
+    goalkeeperPath.start,
+    goalkeeperPath.end,
+    easeOut(clamp((progress - 0.08) / 0.7)),
   )
-  if (aim) drawAim(context, ballStart, aim)
+  drawToken(context, goalkeeperPosition, '#df842d', '#ffd29b', 'G')
+  drawToken(
+    context,
+    { x: ballStart.x - 0.048, y: Math.min(0.96, ballStart.y + 0.055) },
+    '#3d6dcf',
+    '#9fc2ff',
+    'T',
+  )
   const ball = resolution
     ? ballAtProgress(resolution, ballStart, progress)
     : ballStart
-  context.fillStyle = '#fff'
+  drawBall(context, ball)
+  if (resolution && progress >= 1)
+    drawOutcomeOverlay(context, resolution.outcome)
+}
+const drawPitch = (
+  context: CanvasRenderingContext2D,
+  scenario: ShotScenario,
+): void => {
+  context.clearRect(0, 0, WIDTH, HEIGHT)
+  const gradient = context.createLinearGradient(0, 0, 0, HEIGHT)
+  gradient.addColorStop(0, '#173e31')
+  gradient.addColorStop(1, '#0d251d')
+  context.fillStyle = gradient
+  context.fillRect(0, 0, WIDTH, HEIGHT)
+  context.fillStyle = 'rgba(218,241,226,.08)'
+  context.fillRect(
+    GOAL.left,
+    GOAL.top,
+    GOAL.right - GOAL.left,
+    GOAL.bottom - GOAL.top,
+  )
+  context.strokeStyle = 'rgba(226,242,229,.26)'
+  context.lineWidth = 1
+  for (let x = GOAL.left + 35; x < GOAL.right; x += 35) {
+    context.beginPath()
+    context.moveTo(x, GOAL.top)
+    context.lineTo(x, GOAL.bottom)
+    context.stroke()
+  }
+  for (let y = GOAL.top + 28; y < GOAL.bottom; y += 28) {
+    context.beginPath()
+    context.moveTo(GOAL.left, y)
+    context.lineTo(GOAL.right, y)
+    context.stroke()
+  }
+  context.strokeStyle = '#edf8ec'
+  context.lineWidth = 6
+  context.strokeRect(
+    GOAL.left,
+    GOAL.top,
+    GOAL.right - GOAL.left,
+    GOAL.bottom - GOAL.top,
+  )
+  context.strokeStyle = 'rgba(237,248,236,.72)'
+  context.lineWidth = 2
+  context.strokeRect(150, 42, 500, 220)
   context.beginPath()
-  context.arc(ball.x * WIDTH, ball.y * HEIGHT, 11, 0, Math.PI * 2)
-  context.fill()
-  if (resolution && progress >= 1) {
-    context.fillStyle = '#102419'
-    context.font = '700 24px system-ui'
-    context.textAlign = 'center'
-    context.fillText(outcomeLabel(resolution.outcome), WIDTH / 2, 465)
+  context.arc(WIDTH / 2, 262, 95, 0, Math.PI)
+  context.stroke()
+  if (scenario.context.goalkeeperCoversNearPost) {
+    const nearPostX =
+      scenario.geometry.ballStart.x > 0.5 ? GOAL.right : GOAL.left
+    context.strokeStyle = '#ffbd72'
+    context.lineWidth = 8
+    context.beginPath()
+    context.moveTo(nearPostX, GOAL.top)
+    context.lineTo(nearPostX, GOAL.bottom)
+    context.stroke()
+    context.fillStyle = '#ffcf92'
+    context.font = '700 12px system-ui'
+    context.textAlign = nearPostX === GOAL.right ? 'right' : 'left'
+    context.fillText(
+      '1er POTEAU',
+      nearPostX + (nearPostX === GOAL.right ? -10 : 10),
+      28,
+    )
   }
 }
 const drawAim = (
   context: CanvasRenderingContext2D,
   start: NormalizedPoint,
   aim: ShotInput,
+  showTarget: boolean,
 ): void => {
   const target = {
     x: start.x + aim.normalizedDirectionX * 0.5,
     y: start.y + aim.normalizedDirectionY * 0.9,
   }
-  const from = pointToPixels(start)
-  const to = pointToPixels(target)
-  context.strokeStyle = '#d8f48b'
-  context.setLineDash([8, 6])
-  context.lineWidth = 3
+  drawPath(context, start, target, '#b9f47a', [9, 6])
+  if (showTarget) drawReticle(context, target, '#b9f47a')
+  const powerWidth = 150 * aim.normalizedPower
+  context.fillStyle = 'rgba(4,14,10,.72)'
+  context.fillRect(20, 445, 280, 38)
+  context.fillStyle = '#496454'
+  context.fillRect(32, 454, 120, 8)
+  context.fillStyle = '#b9f47a'
+  context.fillRect(32, 454, powerWidth * 0.8, 8)
+  context.strokeStyle = '#d9f3c8'
+  context.lineWidth = 2
   context.beginPath()
-  context.moveTo(from.x, from.y)
-  context.lineTo(to.x, to.y)
+  context.arc(218, 458, 11, 0, Math.PI * 2)
   context.stroke()
-  context.setLineDash([])
-  context.fillStyle = '#d8f48b'
-  context.font = '700 15px system-ui'
+  const timingX = 207 + aim.releaseTiming * 22
+  context.fillStyle = '#b9f47a'
+  context.beginPath()
+  context.arc(timingX, 458, 5, 0, Math.PI * 2)
+  context.fill()
+  context.fillStyle = '#eff9e8'
+  context.font = '700 12px system-ui'
   context.textAlign = 'left'
   context.fillText(
-    `Puissance ${Math.round(aim.normalizedPower * 100)} % · Timing ${Math.round(aim.releaseTiming * 100)} %`,
-    18,
-    478,
+    `PUISSANCE ${Math.round(aim.normalizedPower * 100)}%`,
+    32,
+    475,
   )
+  context.fillText(`TIMING ${Math.round(aim.releaseTiming * 100)}%`, 238, 475)
 }
 const ballAtProgress = (
   resolution: ShotResolution,
   start: NormalizedPoint,
   progress: number,
 ): NormalizedPoint => {
-  let end = resolution.actualBallDestination
-  if (resolution.outcome === 'saved')
-    end = resolution.goalkeeperDecision.interceptionPoint ?? end
-  if (resolution.outcome === 'blocked')
-    end = resolution.defenderBlockPoint ?? end
-  if (resolution.outcome === 'post' && resolution.postBounceDestination) {
-    if (progress > 0.72)
-      return lerp(
-        resolution.actualBallDestination,
-        resolution.postBounceDestination,
-        (progress - 0.72) / 0.28,
-      )
-    end = resolution.actualBallDestination
-  }
-  return lerp(start, end, 1 - (1 - progress) * (1 - progress))
+  if (
+    resolution.outcome === 'post' &&
+    resolution.postBounceDestination &&
+    progress > 0.72
+  )
+    return interpolate(
+      resolution.actualBallDestination,
+      resolution.postBounceDestination,
+      (progress - 0.72) / 0.28,
+    )
+  return interpolate(start, animationDestination(resolution), easeOut(progress))
 }
-const goalkeeperAtProgress = (
+const animationDestination = (resolution: ShotResolution): NormalizedPoint =>
+  resolution.outcome === 'saved'
+    ? (resolution.goalkeeperDecision.interceptionPoint ??
+      resolution.actualBallDestination)
+    : resolution.outcome === 'blocked'
+      ? (resolution.defenderBlockPoint ?? resolution.actualBallDestination)
+      : resolution.actualBallDestination
+const resolveGoalkeeperPath = (
   resolution: ShotResolution | null,
-  progress: number,
   start: NormalizedPoint,
-): NormalizedPoint => {
-  if (!resolution) return start
+): { readonly start: NormalizedPoint; readonly end: NormalizedPoint } => {
+  if (!resolution) return { start, end: start }
+  if (
+    resolution.goalkeeperDecision.reachesBall &&
+    resolution.goalkeeperDecision.interceptionPoint
+  )
+    return { start, end: resolution.goalkeeperDecision.interceptionPoint }
   const direction = resolution.goalkeeperDecision.diveDirection
-  const end =
-    direction === 'left'
-      ? { x: 0.23, y: 0.42 }
-      : direction === 'right'
-        ? { x: 0.77, y: 0.42 }
-        : start
-  return lerp(start, end, Math.min(1, progress * 1.15))
+  return {
+    start,
+    end:
+      direction === 'left'
+        ? { x: 0.23, y: 0.42 }
+        : direction === 'right'
+          ? { x: 0.77, y: 0.42 }
+          : start,
+  }
 }
-const lerp = (
+const drawPath = (
+  context: CanvasRenderingContext2D,
   from: NormalizedPoint,
   to: NormalizedPoint,
-  progress: number,
-): NormalizedPoint => ({
-  x: from.x + (to.x - from.x) * progress,
-  y: from.y + (to.y - from.y) * progress,
-})
-const drawPerson = (
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
   color: string,
-  radius: number,
+  dash: readonly number[],
 ): void => {
-  context.fillStyle = color
+  const start = toPixels(from)
+  const end = toPixels(to)
+  context.strokeStyle = color
+  context.lineWidth = 2.5
+  context.setLineDash([...dash])
   context.beginPath()
-  context.arc(x, y, radius, 0, Math.PI * 2)
-  context.fill()
-  context.fillRect(x - radius * 0.65, y + radius, radius * 1.3, radius * 2.2)
+  context.moveTo(start.x, start.y)
+  context.lineTo(end.x, end.y)
+  context.stroke()
+  context.setLineDash([])
 }
-const outcomeLabel = (outcome: ShotResolution['outcome']): string =>
-  ({
+const drawToken = (
+  context: CanvasRenderingContext2D,
+  point: NormalizedPoint,
+  fill: string,
+  ring: string,
+  label: string,
+): void => {
+  const pixel = toPixels(point)
+  context.fillStyle = 'rgba(0,0,0,.22)'
+  context.beginPath()
+  context.arc(pixel.x + 3, pixel.y + 4, 20, 0, Math.PI * 2)
+  context.fill()
+  context.fillStyle = fill
+  context.beginPath()
+  context.arc(pixel.x, pixel.y, 20, 0, Math.PI * 2)
+  context.fill()
+  context.strokeStyle = ring
+  context.lineWidth = 2
+  context.stroke()
+  context.fillStyle = '#fff'
+  context.font = '800 13px system-ui'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText(label, pixel.x, pixel.y + 1)
+  context.textBaseline = 'alphabetic'
+}
+const drawBall = (
+  context: CanvasRenderingContext2D,
+  point: NormalizedPoint,
+): void => {
+  const pixel = toPixels(point)
+  context.fillStyle = 'rgba(0,0,0,.3)'
+  context.beginPath()
+  context.arc(pixel.x + 2, pixel.y + 3, 9, 0, Math.PI * 2)
+  context.fill()
+  context.fillStyle = '#fff'
+  context.beginPath()
+  context.arc(pixel.x, pixel.y, 9, 0, Math.PI * 2)
+  context.fill()
+  context.strokeStyle = '#aab5c3'
+  context.lineWidth = 1.5
+  context.stroke()
+}
+const drawReticle = (
+  context: CanvasRenderingContext2D,
+  point: NormalizedPoint,
+  color: string,
+): void => {
+  const pixel = toPixels(point)
+  context.strokeStyle = color
+  context.lineWidth = 2
+  context.beginPath()
+  context.arc(pixel.x, pixel.y, 15, 0, Math.PI * 2)
+  context.stroke()
+  context.beginPath()
+  context.moveTo(pixel.x - 21, pixel.y)
+  context.lineTo(pixel.x + 21, pixel.y)
+  context.moveTo(pixel.x, pixel.y - 21)
+  context.lineTo(pixel.x, pixel.y + 21)
+  context.stroke()
+}
+const drawMarker = (
+  context: CanvasRenderingContext2D,
+  point: NormalizedPoint,
+  color: string,
+  label: string,
+): void => {
+  drawReticle(context, point, color)
+  const pixel = toPixels(point)
+  context.fillStyle = color
+  context.font = '700 10px system-ui'
+  context.textAlign = 'center'
+  context.fillText(label, pixel.x, pixel.y - 25)
+}
+const drawOutcomeOverlay = (
+  context: CanvasRenderingContext2D,
+  outcome: ShotResolution['outcome'],
+): void => {
+  const text = {
     goal: 'BUT',
     saved: 'ARRÊT',
-    blocked: 'BLOQUÉ',
+    blocked: 'BLOC',
     post: 'POTEAU',
     'off-target': 'HORS CADRE',
-  })[outcome]
+  }[outcome]
+  context.fillStyle = 'rgba(6,19,13,.78)'
+  context.fillRect(264, 402, 272, 56)
+  context.strokeStyle =
+    outcome === 'goal'
+      ? '#b9f47a'
+      : outcome === 'saved' || outcome === 'blocked'
+        ? '#ffd078'
+        : '#ffab9e'
+  context.lineWidth = 2
+  context.strokeRect(264, 402, 272, 56)
+  context.fillStyle = '#fff'
+  context.font = '900 28px system-ui'
+  context.textAlign = 'center'
+  context.fillText(text, WIDTH / 2, 439)
+}
+const easeOut = (progress: number): number =>
+  1 - (1 - progress) * (1 - progress)

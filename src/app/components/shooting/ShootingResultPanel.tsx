@@ -23,7 +23,9 @@ export const ShootingResultPanel = ({
   return (
     <section className="lab-panel result-panel" aria-live="polite">
       <h2>Résultat</h2>
-      <p className={`outcome outcome-${result.outcome}`}>{result.outcome}</p>
+      <p className={`outcome outcome-${result.outcome}`}>
+        {outcomeLabel(result.outcome)}
+      </p>
       <dl>
         <dt>Qualité finale</dt>
         <dd>{percent(result.finalShotQuality)}</dd>
@@ -39,7 +41,7 @@ export const ShootingResultPanel = ({
         <dd>{formatPoint(result.actualBallDestination)}</dd>
         <dt>Gardien</dt>
         <dd>
-          {result.goalkeeperDecision.diveDirection} · lecture{' '}
+          {directionLabel(result.goalkeeperDecision.diveDirection)} · lecture{' '}
           {result.goalkeeperDecision.readWasCorrect ? 'bonne' : 'ratée'}
         </dd>
         <dt>Réaction / portée</dt>
@@ -65,3 +67,19 @@ const formatPoint = (point: {
   readonly x: number
   readonly y: number
 }): string => `x ${point.x.toFixed(2)} · y ${point.y.toFixed(2)}`
+const outcomeLabel = (outcome: ShotResolution['outcome']): string =>
+  ({
+    goal: 'BUT',
+    saved: 'ARRÊT',
+    blocked: 'BLOC',
+    post: 'POTEAU',
+    'off-target': 'HORS CADRE',
+  })[outcome]
+const directionLabel = (
+  direction: ShotResolution['goalkeeperDecision']['diveDirection'],
+): string =>
+  ({
+    left: 'côté gauche écran',
+    right: 'côté droit écran',
+    stay: 'reste au centre',
+  })[direction]

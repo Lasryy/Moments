@@ -13,6 +13,7 @@ import type {
   ShotWeights,
 } from '../../moments/shooting'
 import { ShootingCanvas } from '../components/shooting/ShootingCanvas'
+import type { VisualDebugOptions } from '../components/shooting/ShootingCanvas'
 import { ShootingControls } from '../components/shooting/ShootingControls'
 import { ShootingResultPanel } from '../components/shooting/ShootingResultPanel'
 
@@ -33,6 +34,13 @@ export const MinigameLabScreen = () => {
   const [aim, setAim] = useState<ShotInput | null>(null)
   const [completedShot, setCompletedShot] = useState<CompletedShot | null>(null)
   const [animationKey, setAnimationKey] = useState(0)
+  const [debug, setDebug] = useState<VisualDebugOptions>({
+    ballPath: true,
+    goalkeeperPath: true,
+    interception: true,
+    blockPoint: true,
+    target: true,
+  })
   const activeScenario = useMemo(
     () => ({
       ...scenario,
@@ -112,11 +120,38 @@ export const MinigameLabScreen = () => {
           }}
         />
         <section className="play-panel">
+          <fieldset className="visual-debug">
+            <legend>Aides visuelles</legend>
+            {(
+              [
+                ['ballPath', 'Trajectoire du ballon'],
+                ['goalkeeperPath', 'Trajectoire du gardien'],
+                ['interception', 'Point d’interception'],
+                ['blockPoint', 'Point de bloc'],
+                ['target', 'Zone visée'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key}>
+                <input
+                  type="checkbox"
+                  checked={debug[key]}
+                  onChange={() =>
+                    setDebug((current) => ({
+                      ...current,
+                      [key]: !current[key],
+                    }))
+                  }
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
           <ShootingCanvas
             scenario={activeScenario}
             aim={aim}
             completedShot={completedShot}
             animationKey={animationKey}
+            debug={debug}
             onAimChange={setAim}
             onShot={fire}
           />
