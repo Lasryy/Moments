@@ -1,0 +1,48 @@
+import { serializeShotInput } from '../../../moments/shooting/normalizeShotInput'
+import type { ShotInput, ShotResolution } from '../../../moments/shooting/types'
+const percent = (value: number): string => `${Math.round(value * 100)} %`
+export const ShootingResultPanel = ({
+  result,
+  input,
+}: {
+  readonly result: ShotResolution
+  readonly input: ShotInput
+}) => (
+  <section className="lab-panel result-panel" aria-live="polite">
+    <h2>Résultat</h2>
+    <p className={`outcome outcome-${result.outcome}`}>{result.outcome}</p>
+    <dl>
+      <dt>Qualité finale</dt>
+      <dd>{percent(result.finalShotQuality)}</dd>
+      <dt>Exécution humaine</dt>
+      <dd>{percent(result.humanExecutionScore)}</dd>
+      <dt>Capacités</dt>
+      <dd>{percent(result.playerAbilityScore)}</dd>
+      <dt>Contexte</dt>
+      <dd>{percent(result.contextScore)}</dd>
+      <dt>Zone visée</dt>
+      <dd>{formatPoint(result.targetPosition)}</dd>
+      <dt>Destination</dt>
+      <dd>{formatPoint(result.actualBallDestination)}</dd>
+      <dt>Gardien</dt>
+      <dd>
+        {result.goalkeeperDecision.diveDirection} · anticipation{' '}
+        {percent(result.goalkeeperDecision.anticipationScore)}
+      </dd>
+      <dt>Indice de conséquence</dt>
+      <dd>{result.consequenceHint}</dd>
+    </dl>
+    <h3>Explications</h3>
+    <ul>
+      {result.explanation.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+    <h3>Geste reproductible</h3>
+    <code>{serializeShotInput(input)}</code>
+  </section>
+)
+const formatPoint = (point: {
+  readonly x: number
+  readonly y: number
+}): string => `x ${point.x.toFixed(2)} · y ${point.y.toFixed(2)}`

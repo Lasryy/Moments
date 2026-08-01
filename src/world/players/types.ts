@@ -1,36 +1,70 @@
 import type { ClubId, PlayerId } from '../../core/ids/types'
 
-export const NATIONALITIES = [
-  'France',
-  'Angleterre',
-  'Espagne',
-  'Allemagne',
-  'Italie',
-  'Portugal',
-  'Pays-Bas',
-  'Belgique',
-  'Croatie',
-  'Serbie',
-  'Turquie',
-  'Brésil',
-  'Argentine',
-  'Uruguay',
-  'Colombie',
-  'Maroc',
-  'Sénégal',
-  'Nigeria',
-  'Ghana',
-  'Côte d’Ivoire',
-  'Cameroun',
-  'Japon',
-  'Corée du Sud',
-  'Mexique',
-  'États-Unis',
-] as const
-export type Nationality = (typeof NATIONALITIES)[number]
+export type NationalityId =
+  | 'france'
+  | 'england'
+  | 'spain'
+  | 'germany'
+  | 'italy'
+  | 'portugal'
+  | 'netherlands'
+  | 'belgium'
+  | 'croatia'
+  | 'serbia'
+  | 'turkey'
+  | 'brazil'
+  | 'argentina'
+  | 'uruguay'
+  | 'colombia'
+  | 'morocco'
+  | 'senegal'
+  | 'nigeria'
+  | 'ghana'
+  | 'ivory-coast'
+  | 'cameroon'
+  | 'japan'
+  | 'south-korea'
+  | 'mexico'
+  | 'united-states'
+
+export interface NationalityMetadata {
+  readonly labelFr: string
+}
+
+/** Stable IDs are saved and simulated; labels only belong to presentation. */
+export const NATIONALITY_METADATA: Readonly<
+  Record<NationalityId, NationalityMetadata>
+> = {
+  france: { labelFr: 'France' },
+  england: { labelFr: 'Angleterre' },
+  spain: { labelFr: 'Espagne' },
+  germany: { labelFr: 'Allemagne' },
+  italy: { labelFr: 'Italie' },
+  portugal: { labelFr: 'Portugal' },
+  netherlands: { labelFr: 'Pays-Bas' },
+  belgium: { labelFr: 'Belgique' },
+  croatia: { labelFr: 'Croatie' },
+  serbia: { labelFr: 'Serbie' },
+  turkey: { labelFr: 'Turquie' },
+  brazil: { labelFr: 'Brésil' },
+  argentina: { labelFr: 'Argentine' },
+  uruguay: { labelFr: 'Uruguay' },
+  colombia: { labelFr: 'Colombie' },
+  morocco: { labelFr: 'Maroc' },
+  senegal: { labelFr: 'Sénégal' },
+  nigeria: { labelFr: 'Nigeria' },
+  ghana: { labelFr: 'Ghana' },
+  'ivory-coast': { labelFr: 'Côte d’Ivoire' },
+  cameroon: { labelFr: 'Cameroun' },
+  japan: { labelFr: 'Japon' },
+  'south-korea': { labelFr: 'Corée du Sud' },
+  mexico: { labelFr: 'Mexique' },
+  'united-states': { labelFr: 'États-Unis' },
+}
+
 export type Position =
   'GK' | 'RB' | 'CB' | 'LB' | 'DM' | 'CM' | 'AM' | 'RW' | 'LW' | 'ST'
-export type StrongFoot = 'left' | 'right' | 'both'
+export type PreferredFoot = 'left' | 'right'
 export type CareerCurve =
   | 'steady'
   | 'early-prodigy'
@@ -44,12 +78,13 @@ export type CareerCurve =
   | 'chaotic'
   | 'exceptional-longevity'
   | 'sporting-collapse'
+
 export interface PlayerIdentity {
   readonly id: PlayerId
   readonly firstName: string
   readonly lastName: string
   readonly displayName: string
-  readonly nationality: Nationality
+  readonly nationality: NationalityId
   readonly birthYear: number
 }
 export interface PlayerAttributes {
@@ -84,14 +119,14 @@ export interface Contract {
   readonly squadRole:
     'prospect' | 'rotation' | 'starter' | 'key-player' | 'star'
 }
+/** identity.id is the sole player identifier in all player-related state. */
 export interface WorldPlayer {
   readonly identity: PlayerIdentity
   readonly positions: readonly Position[]
-  readonly strongFoot: StrongFoot
+  readonly preferredFoot: PreferredFoot
   readonly attributes: PlayerAttributes
   readonly hiddenTraits: HiddenPlayerTraits
   readonly development: DevelopmentProfile
   readonly clubId: ClubId | null
   readonly contract: Contract | null
-  readonly careerPlayerId: PlayerId
 }
