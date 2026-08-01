@@ -301,10 +301,16 @@ const resolveGoalkeeper = (
     goalMouth,
     0.02,
   )
-  const reachesBall =
+  const canPhysicallyReach =
     readWasCorrect &&
     distance(final, interception) <= 0.035 + reachScore * 0.09 &&
     reactionScore > 0.3
+  // A correct read still needs enough late reach against a high-quality finish.
+  const reachesBall =
+    canPhysicallyReach &&
+    rng
+      .fork('goalkeeper-interception')
+      .chance(clampUnit(0.92 - Math.max(0, quality - 0.68) * 0.75))
   return {
     startPosition,
     diveDirection,

@@ -79,6 +79,7 @@ describe('shooting-v3 geometry and resolution', () => {
         'goalkeeper-reach',
         'goalkeeper-first-step',
         'goalkeeper-opposite-commit',
+        'goalkeeper-interception',
         'defender-block',
       ]),
     )
@@ -185,6 +186,11 @@ describe('shooting-v3 geometry and resolution', () => {
     expect(decisions.some((decision) => !decision.readWasCorrect)).toBe(true)
     expect(
       decisions.some((decision) => decision.movement.wrongStep !== null),
+    ).toBe(true)
+    expect(
+      decisions.some(
+        (decision) => decision.readWasCorrect && !decision.reachesBall,
+      ),
     ).toBe(true)
     expect(
       decisions.filter((decision) => decision.wrongFullCommit).length /
