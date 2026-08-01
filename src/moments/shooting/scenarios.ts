@@ -1,4 +1,5 @@
-import type { ShotScenario } from './types'
+import { DEFAULT_GOAL_MOUTH } from './geometry'
+import type { ShotGoalkeeperProfile, ShotScenario } from './types'
 
 const standardPlayer = {
   shooting: 72,
@@ -7,6 +8,16 @@ const standardPlayer = {
   usedFoot: 'right',
   weakFootPenalty: 0.16,
 } as const
+
+const averageGoalkeeper: ShotGoalkeeperProfile = {
+  positioning: 64,
+  reading: 62,
+  reflexes: 66,
+  reach: 65,
+}
+
+const goalMouth = DEFAULT_GOAL_MOUTH
+
 export const SHOT_SCENARIOS: readonly ShotScenario[] = [
   {
     id: 'central-one-on-one',
@@ -14,6 +25,7 @@ export const SHOT_SCENARIOS: readonly ShotScenario[] = [
     description:
       'Ballon dans l’axe, gardien centré, aucune opposition directe.',
     defaultPlayer: standardPlayer,
+    goalkeeper: averageGoalkeeper,
     context: {
       fatigue: 0.2,
       pressure: 0.42,
@@ -23,18 +35,21 @@ export const SHOT_SCENARIOS: readonly ShotScenario[] = [
       goalkeeperCoversNearPost: false,
     },
     geometry: {
-      ballStart: { x: 0.5, y: 0.86 },
-      goalkeeperStart: { x: 0.5, y: 0.29 },
+      goalMouth,
+      shooterPosition: { x: 0.5, y: 0.91 },
+      ballStart: { x: 0.5, y: 0.82 },
+      goalkeeperStart: { x: 0.5, y: 0.4 },
       defenderPositions: [],
     },
-    targetGuide: { x: 0.72, y: 0.27 },
+    targetGuide: { x: 0.7, y: 0.27 },
   },
   {
     id: 'tight-angle',
     label: 'B — Angle fermé',
     description:
-      'Ballon décalé à droite, premier poteau gardé et angle réellement réduit.',
+      'Ballon décalé à droite, premier poteau réel protégé par le gardien.',
     defaultPlayer: standardPlayer,
+    goalkeeper: averageGoalkeeper,
     context: {
       fatigue: 0.28,
       pressure: 0.58,
@@ -44,17 +59,21 @@ export const SHOT_SCENARIOS: readonly ShotScenario[] = [
       goalkeeperCoversNearPost: true,
     },
     geometry: {
+      goalMouth,
+      shooterPosition: { x: 0.82, y: 0.9 },
       ballStart: { x: 0.78, y: 0.82 },
-      goalkeeperStart: { x: 0.68, y: 0.29 },
+      goalkeeperStart: { x: 0.72, y: 0.4 },
       defenderPositions: [],
     },
-    targetGuide: { x: 0.38, y: 0.27 },
+    targetGuide: { x: 0.4, y: 0.28 },
   },
   {
     id: 'defender-contact',
     label: 'C — Défenseur au contact',
-    description: 'Un défenseur coupe une partie des trajectoires vers le but.',
+    description:
+      'Un défenseur se trouve entre le tireur et une partie de la cage.',
     defaultPlayer: standardPlayer,
+    goalkeeper: averageGoalkeeper,
     context: {
       fatigue: 0.38,
       pressure: 0.78,
@@ -64,18 +83,21 @@ export const SHOT_SCENARIOS: readonly ShotScenario[] = [
       goalkeeperCoversNearPost: false,
     },
     geometry: {
-      ballStart: { x: 0.45, y: 0.84 },
-      goalkeeperStart: { x: 0.5, y: 0.29 },
-      defenderPositions: [{ x: 0.52, y: 0.57 }],
+      goalMouth,
+      shooterPosition: { x: 0.45, y: 0.9 },
+      ballStart: { x: 0.45, y: 0.82 },
+      goalkeeperStart: { x: 0.5, y: 0.4 },
+      defenderPositions: [{ x: 0.52, y: 0.64 }],
     },
-    targetGuide: { x: 0.74, y: 0.3 },
+    targetGuide: { x: 0.72, y: 0.3 },
   },
   {
     id: 'decisive-fatigue',
     label: 'D — Action décisive sous fatigue',
     description:
-      'Même géométrie qu’un face-à-face, difficulté due à la fatigue et à l’enjeu.',
+      'Même géométrie centrale, mais fatigue, pression et enjeu très élevés.',
     defaultPlayer: standardPlayer,
+    goalkeeper: averageGoalkeeper,
     context: {
       fatigue: 0.83,
       pressure: 1,
@@ -85,13 +107,16 @@ export const SHOT_SCENARIOS: readonly ShotScenario[] = [
       goalkeeperCoversNearPost: false,
     },
     geometry: {
-      ballStart: { x: 0.5, y: 0.86 },
-      goalkeeperStart: { x: 0.5, y: 0.29 },
+      goalMouth,
+      shooterPosition: { x: 0.5, y: 0.91 },
+      ballStart: { x: 0.5, y: 0.82 },
+      goalkeeperStart: { x: 0.5, y: 0.4 },
       defenderPositions: [],
     },
-    targetGuide: { x: 0.72, y: 0.27 },
+    targetGuide: { x: 0.7, y: 0.27 },
   },
 ]
+
 export const getShotScenario = (id: string): ShotScenario => {
   const scenario = SHOT_SCENARIOS.find((item) => item.id === id)
   if (!scenario) throw new RangeError(`Unknown shot scenario: ${id}`)

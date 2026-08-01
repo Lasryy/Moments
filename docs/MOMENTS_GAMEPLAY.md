@@ -1,39 +1,37 @@
 # Gameplay des Moments
 
-## Laboratoire de frappe v2
+## Laboratoire de frappe v3
 
-Le laboratoire `/dev/minigames` est un test manuel Canvas 2D, sans carrière. La résolution courante est **`shooting-v2`**. Les reproductions `shooting-v1` ne sont pas garanties durant ce développement : il n’existe encore aucune carrière publique à migrer.
+`/dev/minigames` reste un laboratoire Canvas 2D sans carrière. Sa résolution est désormais **`shooting-v3`** ; les reproductions de développement `shooting-v1` et `shooting-v2` ne sont pas garanties, car aucune sauvegarde publique n’existe encore.
 
-Un scénario possède une géométrie indépendante du Canvas : position de départ du ballon, position initiale du gardien et positions de défenseurs. Ainsi, l’angle fermé est réellement décalé et son gardien couvre le premier poteau ; le défenseur au contact coupe une trajectoire ; l’action sous fatigue reprend la géométrie centrale pour isoler l’effet du contexte.
+La scène utilise une vue frontale unique derrière le tireur. Les acteurs restent des pions abstraits : tireur bleu, gardien orange, défenseur gris et ballon blanc. Le choix vise la lisibilité du playtest, et non le style définitif du jeu.
 
-## Lisibilité du playtest
+## Géométrie et classification
 
-Le laboratoire emploie volontairement une représentation abstraite de tableau tactique : tireur bleu, gardien orange, défenseur gris et ballon blanc sont des pions circulaires. Ce n’est pas la direction artistique finale ; cette passe privilégie la compréhension instantanée du placement et de l’issue.
+Le moteur et le Canvas partagent la même géométrie normalisée. La bouche du but est le rectangle `left: 0.20`, `right: 0.80`, `top: 0.12`, `bottom: 0.50`, avec poteaux et barre ayant un rayon simplifié. Le rendu montre une cage rectangulaire, son filet et son cadre ; il ne dessine ni surface de réparation ni arc de terrain.
 
-Le but, sa surface et le premier poteau à angle fermé sont explicitement dessinés. Avant le tir, la ligne pointillée, une cible projetée, la jauge de puissance et le timing restent visibles directement dans la scène. Après le tir, le résultat est figé et libellé en français.
+Une destination extérieure à cette bouche est obligatoirement `off-target`. Un `goal` ou un `saved` est donc impossible hors cadre. Les poteaux et la barre sont détectés par collision géométrique entre la trajectoire et le cadre, avant le gardien. Les défenseurs ne sont évalués que pour une frappe cadrée qui n’a pas touché le cadre.
 
-Les aides visuelles du laboratoire sont activées par défaut et peuvent être masquées individuellement : trajectoire du ballon, déplacement du gardien, interception, bloc et zone visée. Elles permettent de comparer la résolution au rendu sans modifier le moteur.
+L’angle fermé emploie la même cage : le ballon est réellement à droite de l’écran et le premier poteau est donc le vrai poteau droit. Le label `1er POTEAU` est une aide debug seulement.
 
-## Contrôles et états
+## Entrées, résolution et gardien
 
-Le pointeur presse le ballon, glisse, puis relâche. Direction, longueur et durée sont converties en `ShotInput`; un geste trop court est annulé. `pointercancel` annule également sans tirer. Une seule capture active est acceptée.
+Le pointeur presse le ballon, glisse, puis relâche. La direction, la longueur et la durée sont normalisées en `ShotInput`; un geste trop court et `pointercancel` annulent sans tirer. Au clavier, les flèches rendent la cible visible, Espace charge la puissance et relâcher Espace capture le timing.
 
-Au clavier, les flèches affichent immédiatement la cible. Espace charge progressivement la puissance ; un indicateur de timing oscille séparément, puis le relâchement produit le même `ShotInput` que le pointeur. Le moteur ne reçoit jamais de coordonnées Canvas ni de temps système.
+Les poids restent provisoirement 55 % exécution humaine, 30 % capacités et 15 % contexte. L’exécution combine direction, puissance et timing ; le profil utilise tir, gestion de pression et pied ; le contexte utilise fatigue, pression, angle, distance et enjeu.
 
-L’écran distingue explicitement visée, tir terminé et animation. À l’ouverture, aucun tir n’est résolu. Les réglages, la seed ou le scénario préparent une nouvelle situation. Le relâchement résout une fois, « Rejouer » réanime le même résultat sans recalcul.
+Le gardien possède positionnement, lecture, réflexes et portée. Sa résolution distingue lecture, éventuel mauvais premier appui, réaction, distance de déplacement disponible et point d’interception. Une mauvaise lecture mène généralement à un léger appui erroné, du retard ou une portée insuffisante ; un engagement complet au côté opposé est intentionnellement rare en jeu ouvert. Les directions de diagnostic sont toujours « gauche écran », « droite écran » ou « reste au centre ».
 
-## Résolution et gardien
+## Playback et aides
 
-La qualité conserve les poids provisoires : 55 % exécution humaine, 30 % capacités et 15 % contexte. L’exécution combine contrôle de direction, puissance et timing ; les capacités utilisent tir, pression et pied ; le contexte utilise fatigue, pression, angle, distance et enjeu.
+Visée, résultat et playback sont séparés. À l’ouverture, aucun tir n’est calculé. Une nouvelle visée remet proprement la scène à l’état initial ; elle ne laisse ni ancienne trajectoire ni ancien résultat visible. Le relâchement résout une seule fois. « Rejouer exactement » réutilise strictement le même `ShotResolution`, remet son playhead à zéro et ne rappelle pas le moteur. Modifier une aide debug ou redimensionner la scène ne redémarre pas le replay.
 
-Les streams déterministes sont nommés séparément pour les erreurs horizontale/verticale, lecture, direction, réaction et portée du gardien, bloc et poteau. Le gardien ne connaît pas automatiquement le côté visé : il lit l’intention, choisit une direction, réagit et tente d’atteindre le point d’interception depuis sa position initiale. Sa couverture du premier poteau est déterminée dans les deux sens par le côté réel du tireur.
+L’animation est dérivée du résultat déjà calculé : le ballon entre dans le filet, s’arrête à l’interception, atteint le défenseur, rebondit sur le cadre ou sort distinctement hors de la cage. Le gardien suit son déplacement continu depuis sa position initiale, éventuellement via un mauvais premier appui. `prefers-reduced-motion` raccourcit l’animation.
 
-Les issues sont `goal`, `saved`, `blocked`, `post` et `off-target`. Le résultat contient point d’interception, point de bloc et rebond de poteau si nécessaire. L’animation est exclusivement construite à partir de ces données : but dans le filet, arrêt à l’interception, bloc au défenseur, poteau puis rebond, hors cadre au-delà du but. `prefers-reduced-motion` raccourcit l’animation.
-
-Le gardien part toujours de sa position de départ. Sa trace et sa destination rendent visible une lecture correcte, une mauvaise direction ou une portée insuffisante ; lors d’un arrêt, il termine au point d’interception. Cette lisibilité est prioritaire sur tout rendu humanoïde.
+Les aides activées par défaut affichent trajectoire du ballon, déplacement du gardien, interception, bloc et zone visée. La cible est verte dans la cage et orange hors cadre.
 
 ## Calibration et limites
 
-`npm run simulate:shots` fournit un balayage aléatoire de 10 000 frappes et une matrice contrôlée (gestes mauvais/moyen/bon/excellent × tir 48/70/88 × scénarios). Elle affiche les issues, qualité, bonnes lectures et mauvais côtés du gardien. Elle sert à observer une hiérarchie, pas à décider de l’équilibre final.
+`npm run simulate:shots` exécute 10 000 frappes déterministes et une matrice gestes mauvais/moyen/bon/excellent × tir 48/70/88 × scénarios. Il rapporte tirs cadrés, issues, cadre touché, lectures, mauvais appuis, engagements opposés et portée insuffisante, avec une assertion empêchant un but ou arrêt hors cage.
 
-Restent ouverts : style visuel final, caméra, intensité des aides visuelles, niveau de minimalisme, seuils précis du gardien et des blocs, poids finaux, nombre final de Moments, équilibre humain/attributs et sensations tactiles réelles.
+L’équilibre final, la caméra, le rendu visuel, les aides en production, les seuils du gardien et des défenseurs, la part définitive de l’adresse humaine et le nombre de Moments restent ouverts après playtest manuel.

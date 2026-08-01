@@ -1,4 +1,5 @@
 export * from './config'
+export * from './geometry'
 export * from './normalizeShotInput'
 export * from './resolveShot'
 export * from './scenarios'

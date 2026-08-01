@@ -36,10 +36,27 @@ export interface ShotContext {
   readonly matchImportance: number
   readonly goalkeeperCoversNearPost: boolean
 }
-export interface ShotScenarioGeometry {
+/** The goal plane and its frame, expressed in the shared scene coordinates. */
+export interface GoalMouthGeometry {
+  readonly left: number
+  readonly right: number
+  readonly top: number
+  readonly bottom: number
+  readonly postRadius: number
+  readonly crossbarRadius: number
+}
+export interface ShotSceneGeometry {
+  readonly goalMouth: GoalMouthGeometry
   readonly ballStart: NormalizedPoint
+  readonly shooterPosition: NormalizedPoint
   readonly goalkeeperStart: NormalizedPoint
   readonly defenderPositions: readonly NormalizedPoint[]
+}
+export interface ShotGoalkeeperProfile {
+  readonly positioning: number
+  readonly reading: number
+  readonly reflexes: number
+  readonly reach: number
 }
 export interface ShotScenario {
   readonly id: string
@@ -47,7 +64,8 @@ export interface ShotScenario {
   readonly description: string
   readonly defaultPlayer: ShotPlayerProfile
   readonly context: ShotContext
-  readonly geometry: ShotScenarioGeometry
+  readonly geometry: ShotSceneGeometry
+  readonly goalkeeper: ShotGoalkeeperProfile
   readonly targetGuide: NormalizedPoint
 }
 export interface GoalkeeperDecision {
@@ -56,9 +74,19 @@ export interface GoalkeeperDecision {
   readonly readWasCorrect: boolean
   readonly reactionScore: number
   readonly reachScore: number
+  readonly availableTravel: number
+  readonly wrongFullCommit: boolean
+  readonly movement: GoalkeeperMovement
   readonly interceptionPoint: NormalizedPoint | null
   readonly reachesBall: boolean
 }
+export interface GoalkeeperMovement {
+  readonly start: NormalizedPoint
+  readonly wrongStep: NormalizedPoint | null
+  readonly final: NormalizedPoint
+  readonly interception: NormalizedPoint | null
+}
+export type GoalFrameCollision = 'left-post' | 'right-post' | 'crossbar' | null
 export interface ShotResolution {
   readonly outcome: ShotOutcome
   readonly humanExecutionScore: number
@@ -67,6 +95,8 @@ export interface ShotResolution {
   readonly finalShotQuality: number
   readonly targetPosition: NormalizedPoint
   readonly actualBallDestination: NormalizedPoint
+  readonly ballWasOnTarget: boolean
+  readonly frameCollision: GoalFrameCollision
   readonly goalkeeperDecision: GoalkeeperDecision
   readonly defenderBlockPoint: NormalizedPoint | null
   readonly postBounceDestination: NormalizedPoint | null

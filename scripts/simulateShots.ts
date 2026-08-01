@@ -1,5 +1,6 @@
 import { SeededRng } from '../src/core/rng/SeededRng'
 import {
+  isInsideGoalMouth,
   resolveShot,
   SHOT_SCENARIOS,
   SHOT_SIMULATION_VERSION,
@@ -15,7 +16,13 @@ const MATRIX_SEEDS = 400
 type Stats = Record<ShotOutcome, number> & {
   quality: number
   correctRead: number
-  wrongSide: number
+  wrongStep: number
+  oppositeCommit: number
+  insufficientReach: number
+  leftPost: number
+  rightPost: number
+  crossbar: number
+  onTarget: number
   count: number
 }
 const emptyStats = (): Stats => ({
@@ -26,22 +33,40 @@ const emptyStats = (): Stats => ({
   'off-target': 0,
   quality: 0,
   correctRead: 0,
-  wrongSide: 0,
+  wrongStep: 0,
+  oppositeCommit: 0,
+  insufficientReach: 0,
+  leftPost: 0,
+  rightPost: 0,
+  crossbar: 0,
+  onTarget: 0,
   count: 0,
 })
 const add = (stats: Stats, result: ReturnType<typeof resolveShot>): void => {
   stats[result.outcome] += 1
   stats.quality += result.finalShotQuality
   stats.correctRead += Number(result.goalkeeperDecision.readWasCorrect)
-  stats.wrongSide += Number(
-    !result.goalkeeperDecision.readWasCorrect &&
-      result.goalkeeperDecision.diveDirection !== 'stay',
+  stats.wrongStep += Number(
+    result.goalkeeperDecision.movement.wrongStep !== null,
   )
+  stats.oppositeCommit += Number(result.goalkeeperDecision.wrongFullCommit)
+  stats.insufficientReach += Number(
+    result.goalkeeperDecision.readWasCorrect &&
+      !result.goalkeeperDecision.reachesBall,
+  )
+  stats.leftPost += Number(result.frameCollision === 'left-post')
+  stats.rightPost += Number(result.frameCollision === 'right-post')
+  stats.crossbar += Number(result.frameCollision === 'crossbar')
+  stats.onTarget += Number(result.ballWasOnTarget)
   stats.count += 1
 }
 const report = (stats: Stats): string => {
   const rate = (value: number) => `${((value / stats.count) * 100).toFixed(1)}%`
-  return `buts ${rate(stats.goal)} | arrêts ${rate(stats.saved)} | blocs ${rate(stats.blocked)} | poteaux ${rate(stats.post)} | hors ${rate(stats['off-target'])} | q ${(stats.quality / stats.count).toFixed(3)} | lecture ${rate(stats.correctRead)} | mauvais côté ${rate(stats.wrongSide)}`
+  const onTargetRate = (value: number) =>
+    stats.onTarget === 0
+      ? '0.0%'
+      : `${((value / stats.onTarget) * 100).toFixed(1)}%`
+  return `cadrés ${rate(stats.onTarget)} | buts ${rate(stats.goal)} (${onTargetRate(stats.goal)} cadrés) | arrêts ${rate(stats.saved)} (${onTargetRate(stats.saved)} cadrés) | blocs ${rate(stats.blocked)} | poteaux ${rate(stats.post)} [G ${stats.leftPost}, D ${stats.rightPost}, barre ${stats.crossbar}] | hors ${rate(stats['off-target'])} | q ${(stats.quality / stats.count).toFixed(3)} | lecture ${rate(stats.correctRead)} | appui erroné ${rate(stats.wrongStep)} | opposé complet ${rate(stats.oppositeCommit)} | portée insuffisante ${rate(stats.insufficientReach)}`
 }
 const normalizeDirection = (
   x: number,
@@ -49,6 +74,19 @@ const normalizeDirection = (
 ): Pick<ShotInput, 'normalizedDirectionX' | 'normalizedDirectionY'> => {
   const length = Math.max(1, Math.hypot(x, y))
   return { normalizedDirectionX: x / length, normalizedDirectionY: y / length }
+}
+const assertInside = (
+  result: ReturnType<typeof resolveShot>,
+  scenario: ShotScenario,
+): void => {
+  if (
+    (result.outcome === 'goal' || result.outcome === 'saved') &&
+    !isInsideGoalMouth(
+      result.actualBallDestination,
+      scenario.geometry.goalMouth,
+    )
+  )
+    throw new Error(`Invalid ${result.outcome}: destination outside goal`)
 }
 
 console.log(
@@ -58,7 +96,7 @@ const randomStats = emptyStats()
 const randomByScenario = new Map<string, Stats>()
 for (let index = 0; index < RANDOM_TOTAL; index += 1) {
   const scenario = SHOT_SCENARIOS[index % SHOT_SCENARIOS.length]!
-  const rng = new SeededRng(`shooting-v2-sweep:${index}`)
+  const rng = new SeededRng(`shooting-v3-sweep:${index}`)
   const direction = normalizeDirection(
     rng.nextFloat() * 1.6 - 0.8,
     -(0.25 + rng.nextFloat() * 0.75),
@@ -75,6 +113,7 @@ for (let index = 0; index < RANDOM_TOTAL; index += 1) {
     player: { ...scenario.defaultPlayer, shooting: [48, 70, 88][index % 3]! },
     input,
   })
+  assertInside(result, scenario)
   add(randomStats, result)
   const scenarioStats = randomByScenario.get(scenario.id) ?? emptyStats()
   add(scenarioStats, result)
@@ -83,8 +122,7 @@ for (let index = 0; index < RANDOM_TOTAL; index += 1) {
 console.log(`Global : ${report(randomStats)}`)
 for (const scenario of SHOT_SCENARIOS)
   console.log(`- ${scenario.id}: ${report(randomByScenario.get(scenario.id)!)}`)
-
-const gestureQuality = {
+const gestures = {
   mauvais: { directionScale: 0.18, power: 0.14, timing: 0.04 },
   moyen: { directionScale: 0.7, power: 0.44, timing: 0.33 },
   bon: { directionScale: 0.9, power: 0.66, timing: 0.58 },
@@ -93,35 +131,23 @@ const gestureQuality = {
 console.log(`\nMatrice contrôlée — ${MATRIX_SEEDS} seeds par combinaison`)
 for (const scenario of SHOT_SCENARIOS) {
   console.log(`\n${scenario.label}`)
-  for (const [gestureName, quality] of Object.entries(gestureQuality)) {
-    const input = inputForScenario(scenario, quality)
+  for (const [name, quality] of Object.entries(gestures))
     for (const shooting of [48, 70, 88]) {
-      const stats = controlledStats(scenario, input, shooting, gestureName)
-      console.log(
-        `- ${gestureName.padEnd(10)} · tir ${shooting}: ${report(stats)}`,
-      )
+      const stats = emptyStats()
+      const input = inputForScenario(scenario, quality)
+      for (let index = 0; index < MATRIX_SEEDS; index += 1) {
+        const result = resolveShot({
+          simulationVersion: SHOT_SIMULATION_VERSION,
+          seed: `matrix:${scenario.id}:${name}:${shooting}:${index}`,
+          scenario,
+          player: { ...scenario.defaultPlayer, shooting },
+          input,
+        })
+        assertInside(result, scenario)
+        add(stats, result)
+      }
+      console.log(`- ${name.padEnd(10)} · tir ${shooting}: ${report(stats)}`)
     }
-  }
-}
-function controlledStats(
-  scenario: ShotScenario,
-  input: ShotInput,
-  shooting: number,
-  gestureName: string,
-): Stats {
-  const stats = emptyStats()
-  for (let index = 0; index < MATRIX_SEEDS; index += 1)
-    add(
-      stats,
-      resolveShot({
-        simulationVersion: SHOT_SIMULATION_VERSION,
-        seed: `matrix:${scenario.id}:${gestureName}:${shooting}:${index}`,
-        scenario,
-        player: { ...scenario.defaultPlayer, shooting },
-        input,
-      }),
-    )
-  return stats
 }
 function inputForScenario(
   scenario: ShotScenario,
@@ -131,17 +157,12 @@ function inputForScenario(
     readonly timing: number
   },
 ): ShotInput {
-  const dx = (scenario.targetGuide.x - scenario.geometry.ballStart.x) / 0.5
-  const dy = (scenario.targetGuide.y - scenario.geometry.ballStart.y) / 0.9
-  const baseDirection = normalizeDirection(dx, dy)
-  const direction = {
-    normalizedDirectionX:
-      baseDirection.normalizedDirectionX * quality.directionScale,
-    normalizedDirectionY:
-      baseDirection.normalizedDirectionY * quality.directionScale,
-  }
+  const dx = (scenario.targetGuide.x - scenario.geometry.ballStart.x) / 0.55
+  const dy = (scenario.targetGuide.y - scenario.geometry.ballStart.y) / 0.6
+  const base = normalizeDirection(dx, dy)
   return {
-    ...direction,
+    normalizedDirectionX: base.normalizedDirectionX * quality.directionScale,
+    normalizedDirectionY: base.normalizedDirectionY * quality.directionScale,
     normalizedPower: quality.power,
     releaseTiming: quality.timing,
   }

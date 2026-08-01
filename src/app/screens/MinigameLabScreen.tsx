@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_SHOT_WEIGHTS,
   getShotScenario,
@@ -16,8 +16,15 @@ import { ShootingCanvas } from '../components/shooting/ShootingCanvas'
 import type { VisualDebugOptions } from '../components/shooting/ShootingCanvas'
 import { ShootingControls } from '../components/shooting/ShootingControls'
 import { ShootingResultPanel } from '../components/shooting/ShootingResultPanel'
+import {
+  finishPlayback,
+  idlePlayback,
+  startPlayback,
+} from '../components/shooting/playback'
+import type { PlaybackState } from '../components/shooting/playback'
 
 export interface CompletedShot {
+  readonly id: string
   readonly input: ShotInput
   readonly resolution: ShotResolution
 }
@@ -33,7 +40,9 @@ export const MinigameLabScreen = () => {
   const [weights, setWeights] = useState<ShotWeights>(DEFAULT_SHOT_WEIGHTS)
   const [aim, setAim] = useState<ShotInput | null>(null)
   const [completedShot, setCompletedShot] = useState<CompletedShot | null>(null)
-  const [animationKey, setAnimationKey] = useState(0)
+  const [playback, setPlayback] = useState<PlaybackState>(idlePlayback)
+  const nextShotId = useRef(0)
+  const nextPlaybackRun = useRef(0)
   const [debug, setDebug] = useState<VisualDebugOptions>({
     ballPath: true,
     goalkeeperPath: true,
@@ -51,6 +60,14 @@ export const MinigameLabScreen = () => {
   const resetSituation = (): void => {
     setAim(null)
     setCompletedShot(null)
+    setPlayback(idlePlayback)
+  }
+  const beginAim = (input: ShotInput | null): void => {
+    if (input !== null && completedShot !== null) {
+      setCompletedShot(null)
+      setPlayback(idlePlayback)
+    }
+    setAim(input)
   }
   const fire = (input: ShotInput): void => {
     const resolution = resolveShot({
@@ -61,10 +78,25 @@ export const MinigameLabScreen = () => {
       input,
       weights,
     })
+    const id = `shot-${++nextShotId.current}`
     setAim(null)
-    setCompletedShot({ input, resolution })
-    setAnimationKey((value) => value + 1)
+    setCompletedShot({ id, input, resolution })
+    setPlayback(startPlayback(id, ++nextPlaybackRun.current, performance.now()))
   }
+  const replay = (): void => {
+    if (!completedShot) return
+    setAim(null)
+    setPlayback(
+      startPlayback(
+        completedShot.id,
+        ++nextPlaybackRun.current,
+        performance.now(),
+      ),
+    )
+  }
+  const completePlayback = useCallback((): void => {
+    setPlayback((current) => finishPlayback(current))
+  }, [])
   const changeScenario = (id: string): void => {
     const next = getShotScenario(id)
     setScenarioId(id)
@@ -150,16 +182,17 @@ export const MinigameLabScreen = () => {
             scenario={activeScenario}
             aim={aim}
             completedShot={completedShot}
-            animationKey={animationKey}
+            playback={playback}
             debug={debug}
-            onAimChange={setAim}
+            onAimChange={beginAim}
             onShot={fire}
+            onPlaybackFinished={completePlayback}
           />
           <div className="play-actions">
             <button
               type="button"
               disabled={completedShot === null}
-              onClick={() => setAnimationKey((value) => value + 1)}
+              onClick={replay}
             >
               Rejouer exactement cette frappe
             </button>
