@@ -9,22 +9,20 @@ import {
 import type {
   ShotInput,
   ShotPlayerProfile,
+  ShotResolution,
   ShotWeights,
 } from '../../moments/shooting'
 import { ShootingCanvas } from '../components/shooting/ShootingCanvas'
 import { ShootingControls } from '../components/shooting/ShootingControls'
 import { ShootingResultPanel } from '../components/shooting/ShootingResultPanel'
-const INITIAL_INPUT: ShotInput = {
-  normalizedDirectionX: 0.45,
-  normalizedDirectionY: -0.78,
-  normalizedPower: 0.66,
-  releaseTiming: 0.52,
+
+export interface CompletedShot {
+  readonly input: ShotInput
+  readonly resolution: ShotResolution
 }
 export const MinigameLabScreen = () => {
   const [seed, setSeed] = useState('moments-shooting-lab')
   const [scenarioId, setScenarioId] = useState(SHOT_SCENARIOS[0]!.id)
-  const [input, setInput] = useState<ShotInput>(INITIAL_INPUT)
-  const [animationKey, setAnimationKey] = useState(0)
   const scenario = getShotScenario(scenarioId)
   const [player, setPlayer] = useState<ShotPlayerProfile>(
     scenario.defaultPlayer,
@@ -32,6 +30,9 @@ export const MinigameLabScreen = () => {
   const [fatigue, setFatigue] = useState(scenario.context.fatigue)
   const [pressure, setPressure] = useState(scenario.context.pressure)
   const [weights, setWeights] = useState<ShotWeights>(DEFAULT_SHOT_WEIGHTS)
+  const [aim, setAim] = useState<ShotInput | null>(null)
+  const [completedShot, setCompletedShot] = useState<CompletedShot | null>(null)
+  const [animationKey, setAnimationKey] = useState(0)
   const activeScenario = useMemo(
     () => ({
       ...scenario,
@@ -39,28 +40,34 @@ export const MinigameLabScreen = () => {
     }),
     [scenario, fatigue, pressure],
   )
-  const result = useMemo(
-    () =>
-      resolveShot({
-        simulationVersion: SHOT_SIMULATION_VERSION,
-        seed: seed || 'empty-seed',
-        scenario: activeScenario,
-        player,
-        input,
-        weights,
-      }),
-    [seed, activeScenario, player, input, weights],
-  )
-  const changeScenario = (id: string) => {
+  const resetSituation = (): void => {
+    setAim(null)
+    setCompletedShot(null)
+  }
+  const fire = (input: ShotInput): void => {
+    const resolution = resolveShot({
+      simulationVersion: SHOT_SIMULATION_VERSION,
+      seed: seed || 'empty-seed',
+      scenario: activeScenario,
+      player,
+      input,
+      weights,
+    })
+    setAim(null)
+    setCompletedShot({ input, resolution })
+    setAnimationKey((value) => value + 1)
+  }
+  const changeScenario = (id: string): void => {
     const next = getShotScenario(id)
     setScenarioId(id)
     setPlayer(next.defaultPlayer)
     setFatigue(next.context.fatigue)
     setPressure(next.context.pressure)
+    resetSituation()
   }
-  const fire = (nextInput: ShotInput) => {
-    setInput(nextInput)
-    setAnimationKey((value) => value + 1)
+  const changeSeed = (value: string): void => {
+    setSeed(value)
+    resetSituation()
   }
   return (
     <main className="lab-shell">
@@ -72,8 +79,8 @@ export const MinigameLabScreen = () => {
         <h1>Moment de frappe</h1>
         <p>
           Visez depuis le ballon, glissez pour régler direction et puissance,
-          puis relâchez. Au clavier : flèches puis maintien et relâchement
-          d’espace.
+          puis relâchez. Au clavier : flèches pour viser, espace pour charger
+          puis tirer.
         </p>
       </header>
       <div className="lab-grid">
@@ -85,27 +92,38 @@ export const MinigameLabScreen = () => {
           fatigue={fatigue}
           pressure={pressure}
           weights={weights}
-          onSeedChange={setSeed}
+          onSeedChange={changeSeed}
           onScenarioChange={changeScenario}
-          onPlayerChange={(patch) =>
+          onPlayerChange={(patch) => {
             setPlayer((current) => ({ ...current, ...patch }))
-          }
-          onFatigueChange={setFatigue}
-          onPressureChange={setPressure}
-          onWeightsChange={(patch) =>
+            resetSituation()
+          }}
+          onFatigueChange={(value) => {
+            setFatigue(value)
+            resetSituation()
+          }}
+          onPressureChange={(value) => {
+            setPressure(value)
+            resetSituation()
+          }}
+          onWeightsChange={(patch) => {
             setWeights((current) => ({ ...current, ...patch }))
-          }
+            resetSituation()
+          }}
         />
         <section className="play-panel">
           <ShootingCanvas
             scenario={activeScenario}
-            resolution={result}
+            aim={aim}
+            completedShot={completedShot}
             animationKey={animationKey}
+            onAimChange={setAim}
             onShot={fire}
           />
           <div className="play-actions">
             <button
               type="button"
+              disabled={completedShot === null}
               onClick={() => setAnimationKey((value) => value + 1)}
             >
               Rejouer exactement cette frappe
@@ -115,7 +133,7 @@ export const MinigameLabScreen = () => {
             </p>
           </div>
         </section>
-        <ShootingResultPanel result={result} input={input} />
+        <ShootingResultPanel completedShot={completedShot} />
       </div>
     </main>
   )

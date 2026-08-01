@@ -8,12 +8,25 @@ import type {
   ShotResolution,
 } from './types'
 
-const clampPoint = (point: NormalizedPoint): NormalizedPoint => ({
-  x: clampUnit(point.x),
-  y: clampUnit(point.y),
+const GOAL = { left: 0.11, right: 0.89, top: 0.07, bottom: 0.83 }
+const clampPoint = (
+  point: NormalizedPoint,
+  minimum = 0,
+  maximum = 1,
+): NormalizedPoint => ({
+  x: Math.min(maximum, Math.max(minimum, point.x)),
+  y: Math.min(maximum, Math.max(minimum, point.y)),
 })
-const pointDistance = (a: NormalizedPoint, b: NormalizedPoint): number =>
+const distance = (a: NormalizedPoint, b: NormalizedPoint): number =>
   Math.hypot(a.x - b.x, a.y - b.y)
+const lerpPoint = (
+  from: NormalizedPoint,
+  to: NormalizedPoint,
+  progress: number,
+): NormalizedPoint => ({
+  x: from.x + (to.x - from.x) * progress,
+  y: from.y + (to.y - from.y) * progress,
+})
 
 export const resolveShot = (request: ResolveShotRequest): ShotResolution => {
   const input = normalizeShotInput(request.input)
@@ -21,88 +34,86 @@ export const resolveShot = (request: ResolveShotRequest): ShotResolution => {
   const { scenario, player } = request
   validatePlayer(player)
   validateContext(scenario.context)
-  const namespace = `${request.simulationVersion}:${request.seed}:${scenario.id}`
-  const rng = new SeededRng(namespace)
+  const rng = new SeededRng(
+    `${request.simulationVersion}:${request.seed}:${scenario.id}`,
+  )
+  const { ballStart } = scenario.geometry
   const targetPosition = clampPoint({
-    x: 0.5 + input.normalizedDirectionX * 0.43,
-    y: 0.67 + input.normalizedDirectionY * 0.55,
+    x: ballStart.x + input.normalizedDirectionX * 0.5,
+    y: ballStart.y + input.normalizedDirectionY * 0.9,
   })
-  const directionMagnitude = Math.hypot(
-    input.normalizedDirectionX,
-    input.normalizedDirectionY,
-  )
-  const directionalControl = clampUnit(
-    1 - Math.abs(directionMagnitude - 0.85) * 0.55,
-  )
-  const powerControl = clampUnit(
-    1 - Math.abs(input.normalizedPower - 0.66) * 1.45,
-  )
-  const timingControl = clampUnit(
-    1 - Math.abs(input.releaseTiming - 0.52) * 1.1,
-  )
-  const humanExecutionScore = clampUnit(
-    directionalControl * 0.38 + powerControl * 0.37 + timingControl * 0.25,
-  )
-  const weakFootFactor =
-    player.preferredFoot === player.usedFoot ? 1 : 1 - player.weakFootPenalty
-  const playerAbilityScore = clampUnit(
-    (player.shooting / 100) * 0.72 * weakFootFactor +
-      (player.pressureHandling / 100) * 0.28,
-  )
-  const contextPenalty =
-    scenario.context.fatigue * 0.29 +
-    scenario.context.pressure * 0.18 +
-    scenario.context.angleDifficulty * 0.25 +
-    scenario.context.distance * 0.12 +
-    scenario.context.matchImportance * 0.08
-  const contextScore = clampUnit(1 - contextPenalty)
+  const humanExecutionScore = calculateHumanScore(input)
+  const playerAbilityScore = calculatePlayerScore(player)
+  const contextScore = calculateContextScore(scenario)
   const finalShotQuality = clampUnit(
     humanExecutionScore * weights.humanExecution +
       playerAbilityScore * weights.playerAbility +
       contextScore * weights.context,
   )
-  const variation = rng.fork('outcome-variation').nextFloat() - 0.5
   const errorMagnitude =
-    (1 - finalShotQuality) * 0.3 + Math.abs(input.normalizedPower - 0.66) * 0.14
-  const actualBallDestination = clampPoint({
-    x: targetPosition.x + variation * errorMagnitude * 1.8,
-    y:
-      targetPosition.y +
-      (rng.fork('shooting').nextFloat() - 0.5) * errorMagnitude * 1.35,
-  })
-  const defendersRoll = rng.fork('defenders').nextFloat()
-  const blockThreshold =
-    scenario.context.defenderCount * (0.12 + (1 - finalShotQuality) * 0.22)
-  const goalkeeperDecision = resolveGoalkeeper(
-    rng,
-    targetPosition,
-    actualBallDestination,
-    finalShotQuality,
-    scenario.context.goalkeeperCoversNearPost,
+    (1 - finalShotQuality) * 0.34 +
+    Math.abs(input.normalizedPower - 0.66) * 0.15
+  const actualBallDestination = clampPoint(
+    {
+      x:
+        targetPosition.x +
+        (rng.fork('destination-horizontal').nextFloat() - 0.5) *
+          errorMagnitude *
+          2.15,
+      y:
+        targetPosition.y +
+        (rng.fork('destination-vertical').nextFloat() - 0.5) *
+          errorMagnitude *
+          1.7,
+    },
+    -0.15,
+    1.15,
   )
   const isOffTarget =
-    actualBallDestination.x < 0.11 ||
-    actualBallDestination.x > 0.89 ||
-    actualBallDestination.y < 0.07 ||
-    actualBallDestination.y > 0.83
-  const postDistance = Math.min(
-    Math.abs(actualBallDestination.x - 0.12),
-    Math.abs(actualBallDestination.x - 0.88),
-  )
+    actualBallDestination.x < GOAL.left ||
+    actualBallDestination.x > GOAL.right ||
+    actualBallDestination.y < GOAL.top ||
+    actualBallDestination.y > GOAL.bottom
+  const defenderBlockPoint = isOffTarget
+    ? null
+    : resolveDefenderBlock(
+        rng,
+        scenario,
+        actualBallDestination,
+        finalShotQuality,
+      )
   const hitsPost =
     !isOffTarget &&
-    postDistance < 0.035 &&
-    actualBallDestination.y < 0.77 &&
-    rng.fork('outcome-variation').nextFloat() < 0.52
+    defenderBlockPoint === null &&
+    hitsGoalPost(rng, actualBallDestination, finalShotQuality)
+  const goalkeeperDecision =
+    isOffTarget || defenderBlockPoint || hitsPost
+      ? noInterception(scenario.geometry.goalkeeperStart)
+      : resolveGoalkeeper(
+          rng,
+          scenario,
+          actualBallDestination,
+          finalShotQuality,
+        )
   const outcome = isOffTarget
     ? 'off-target'
-    : defendersRoll < blockThreshold
+    : defenderBlockPoint
       ? 'blocked'
       : hitsPost
         ? 'post'
         : goalkeeperDecision.reachesBall
           ? 'saved'
           : 'goal'
+  const postBounceDestination =
+    outcome === 'post'
+      ? {
+          x:
+            actualBallDestination.x < 0.5
+              ? actualBallDestination.x + 0.09
+              : actualBallDestination.x - 0.09,
+          y: actualBallDestination.y + 0.12,
+        }
+      : null
   return {
     outcome,
     humanExecutionScore,
@@ -112,65 +123,210 @@ export const resolveShot = (request: ResolveShotRequest): ShotResolution => {
     targetPosition,
     actualBallDestination,
     goalkeeperDecision,
+    defenderBlockPoint,
+    postBounceDestination,
     consequenceHint: consequenceFor(outcome, scenario.context.matchImportance),
-    explanation: explain({
+    explanation: explain(
       input,
       player,
       scenario,
       humanExecutionScore,
       goalkeeperDecision,
       outcome,
-    }),
+    ),
   }
 }
 
+const calculateHumanScore = (input: ResolveShotRequest['input']): number => {
+  const direction = Math.hypot(
+    input.normalizedDirectionX,
+    input.normalizedDirectionY,
+  )
+  const directionControl = clampUnit(1 - Math.abs(direction - 0.88) * 0.75)
+  const powerControl = clampUnit(
+    1 - Math.abs(input.normalizedPower - 0.66) * 1.55,
+  )
+  const timingControl = clampUnit(
+    1 - Math.abs(input.releaseTiming - 0.58) * 1.25,
+  )
+  return clampUnit(
+    directionControl * 0.36 + powerControl * 0.38 + timingControl * 0.26,
+  )
+}
+const calculatePlayerScore = (player: ResolveShotRequest['player']): number => {
+  const footFactor =
+    player.preferredFoot === player.usedFoot ? 1 : 1 - player.weakFootPenalty
+  return clampUnit(
+    (player.shooting / 100) * 0.78 * footFactor +
+      (player.pressureHandling / 100) * 0.22,
+  )
+}
+export const calculateContextScore = (
+  scenario: ResolveShotRequest['scenario'],
+): number =>
+  clampUnit(
+    1 -
+      (scenario.context.fatigue * 0.3 +
+        scenario.context.pressure * 0.18 +
+        scenario.context.angleDifficulty * 0.27 +
+        scenario.context.distance * 0.14 +
+        scenario.context.matchImportance * 0.11),
+  )
+const resolveDefenderBlock = (
+  rng: SeededRng,
+  scenario: ResolveShotRequest['scenario'],
+  destination: NormalizedPoint,
+  quality: number,
+): NormalizedPoint | null => {
+  const closest = scenario.geometry.defenderPositions
+    .map((position) => ({
+      position,
+      proximity: distanceToSegment(
+        position,
+        scenario.geometry.ballStart,
+        destination,
+      ),
+    }))
+    .sort((a, b) => a.proximity - b.proximity)[0]
+  if (!closest) return null
+  const chance = clampUnit(
+    (0.16 + (1 - quality) * 0.34) * clampUnit(1 - closest.proximity / 0.2),
+  )
+  return rng.fork('defender-block').chance(chance) ? closest.position : null
+}
+const distanceToSegment = (
+  point: NormalizedPoint,
+  start: NormalizedPoint,
+  end: NormalizedPoint,
+): number => {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const lengthSquared = dx * dx + dy * dy
+  if (lengthSquared === 0) return distance(point, start)
+  const progress = clampUnit(
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+  )
+  return distance(point, lerpPoint(start, end, progress))
+}
+const hitsGoalPost = (
+  rng: SeededRng,
+  destination: NormalizedPoint,
+  quality: number,
+): boolean => {
+  const proximity = Math.min(
+    Math.abs(destination.x - GOAL.left),
+    Math.abs(destination.x - GOAL.right),
+  )
+  return (
+    proximity < 0.032 &&
+    rng.fork('post-collision').chance(clampUnit(0.62 - quality * 0.2))
+  )
+}
 const resolveGoalkeeper = (
   rng: SeededRng,
-  target: NormalizedPoint,
-  actual: NormalizedPoint,
+  scenario: ResolveShotRequest['scenario'],
+  destination: NormalizedPoint,
   quality: number,
-  coversNearPost: boolean,
 ): GoalkeeperDecision => {
-  const roll = rng.fork('goalkeeper').nextFloat()
-  const diveDirection = roll < 0.12 ? 'stay' : target.x < 0.5 ? 'left' : 'right'
-  const anticipationScore = clampUnit(
-    0.32 + roll * 0.35 + (coversNearPost && target.x < 0.38 ? 0.2 : 0),
+  const startPosition = scenario.geometry.goalkeeperStart
+  const intendedDirection =
+    destination.x < startPosition.x - 0.035
+      ? 'left'
+      : destination.x > startPosition.x + 0.035
+        ? 'right'
+        : 'stay'
+  const nearPostSide =
+    scenario.geometry.ballStart.x < 0.5
+      ? 'left'
+      : scenario.geometry.ballStart.x > 0.5
+        ? 'right'
+        : null
+  const readingSkill =
+    0.42 +
+    (scenario.context.goalkeeperCoversNearPost &&
+    nearPostSide === intendedDirection
+      ? 0.18
+      : 0)
+  const readWasCorrect = rng.fork('goalkeeper-reading').chance(readingSkill)
+  const wrongChoice = rng.fork('goalkeeper-direction').nextFloat()
+  const diveDirection = readWasCorrect
+    ? intendedDirection
+    : wrongChoice < 0.62
+      ? intendedDirection === 'left'
+        ? 'right'
+        : 'left'
+      : 'stay'
+  const reactionScore = clampUnit(
+    0.32 + rng.fork('goalkeeper-reaction').nextFloat() * 0.5 - quality * 0.14,
   )
-  const diveCenterX =
-    diveDirection === 'left' ? 0.28 : diveDirection === 'right' ? 0.72 : 0.5
-  const reach = 0.2 + anticipationScore * 0.18 - quality * 0.1
+  const reachScore = clampUnit(
+    0.18 +
+      rng.fork('goalkeeper-reach').nextFloat() * 0.4 +
+      (scenario.context.goalkeeperCoversNearPost &&
+      nearPostSide === diveDirection
+        ? 0.14
+        : 0) -
+      quality * 0.12,
+  )
+  const diveTarget = {
+    x:
+      diveDirection === 'left'
+        ? 0.23
+        : diveDirection === 'right'
+          ? 0.77
+          : startPosition.x,
+    y: 0.42,
+  }
+  const interceptionPoint = lerpPoint(
+    scenario.geometry.ballStart,
+    destination,
+    0.68,
+  )
+  const reachesBall =
+    diveDirection === intendedDirection &&
+    distance(interceptionPoint, diveTarget) < reachScore + reactionScore * 0.16
   return {
+    startPosition,
     diveDirection,
-    anticipationScore,
-    reachesBall: pointDistance(actual, { x: diveCenterX, y: 0.43 }) < reach,
+    readWasCorrect,
+    reactionScore,
+    reachScore,
+    interceptionPoint: reachesBall ? interceptionPoint : null,
+    reachesBall,
   }
 }
+const noInterception = (
+  startPosition: NormalizedPoint,
+): GoalkeeperDecision => ({
+  startPosition,
+  diveDirection: 'stay',
+  readWasCorrect: false,
+  reactionScore: 0,
+  reachScore: 0,
+  interceptionPoint: null,
+  reachesBall: false,
+})
 const consequenceFor = (
   outcome: ShotResolution['outcome'],
   importance: number,
-): ShotResolution['consequenceHint'] => {
-  if (outcome === 'goal')
-    return importance > 0.8 ? 'major-positive' : 'minor-positive'
-  if (outcome === 'off-target' && importance > 0.8) return 'major-negative'
-  return outcome === 'saved' || outcome === 'blocked' || outcome === 'post'
-    ? 'minor-negative'
-    : 'neutral'
-}
-const explain = ({
-  input,
-  player,
-  scenario,
-  humanExecutionScore,
-  goalkeeperDecision,
-  outcome,
-}: {
-  input: ResolveShotRequest['input']
-  player: ResolveShotRequest['player']
-  scenario: ResolveShotRequest['scenario']
-  humanExecutionScore: number
-  goalkeeperDecision: GoalkeeperDecision
-  outcome: ShotResolution['outcome']
-}): readonly string[] => {
+): ShotResolution['consequenceHint'] =>
+  outcome === 'goal'
+    ? importance > 0.8
+      ? 'major-positive'
+      : 'minor-positive'
+    : outcome === 'off-target' && importance > 0.8
+      ? 'major-negative'
+      : outcome === 'saved' || outcome === 'blocked' || outcome === 'post'
+        ? 'minor-negative'
+        : 'neutral'
+const explain = (
+  input: ResolveShotRequest['input'],
+  player: ResolveShotRequest['player'],
+  scenario: ResolveShotRequest['scenario'],
+  humanScore: number,
+  goalkeeper: GoalkeeperDecision,
+  outcome: ShotResolution['outcome'],
+): readonly string[] => {
   const messages: string[] = []
   if (Math.abs(input.normalizedPower - 0.66) > 0.25)
     messages.push(
@@ -183,13 +339,20 @@ const explain = ({
   if (player.preferredFoot !== player.usedFoot)
     messages.push('Tir réalisé du pied faible.')
   if (player.shooting >= 80) messages.push('Excellente finition.')
-  if (humanExecutionScore >= 0.8) messages.push('Geste bien maîtrisé.')
+  if (humanScore >= 0.82) messages.push('Geste bien maîtrisé.')
   if (outcome === 'blocked') messages.push('Défenseur sur la trajectoire.')
   if (outcome === 'post') messages.push('Le poteau repousse la frappe.')
   if (outcome === 'off-target') messages.push('La frappe sort du cadre.')
-  if (outcome === 'saved' && goalkeeperDecision.reachesBall)
-    messages.push('Gardien ayant correctement anticipé.')
-  if (outcome === 'goal') messages.push('Le gardien ne peut pas intervenir.')
+  if (outcome === 'saved')
+    messages.push(
+      goalkeeper.readWasCorrect
+        ? 'Gardien ayant correctement lu la frappe.'
+        : 'Le gardien atteint le ballon tardivement.',
+    )
+  if (outcome === 'goal' && !goalkeeper.readWasCorrect)
+    messages.push('Gardien parti du mauvais côté.')
+  if (outcome === 'goal' && goalkeeper.readWasCorrect)
+    messages.push('Bonne lecture, portée insuffisante.')
   return messages
 }
 const validatePlayer = (player: ResolveShotRequest['player']): void => {
@@ -215,6 +378,4 @@ const validateContext = (
   ])
     if (!Number.isFinite(value) || value < 0 || value > 1)
       throw new RangeError('Shot context values must be between 0 and 1.')
-  if (!Number.isInteger(context.defenderCount) || context.defenderCount < 0)
-    throw new RangeError('Defender count must be a non-negative integer.')
 }

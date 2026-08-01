@@ -1,16 +1,11 @@
 # Questions ouvertes
 
-Le prototype de frappe utilise provisoirement une vue Canvas 2D, le geste glissé et des poids 55/30/15 ; aucun de ces choix n'est définitif.
+Le laboratoire emploie provisoirement Canvas 2D, une géométrie de quatre scénarios, `shooting-v2` et des poids 55/30/15. Ces choix servent au test manuel et ne sont pas définitifs.
 
-- Postes disponibles dans le premier prototype.
-- Nombre de clubs du premier monde jouable.
-- Noms réels ou fictifs des clubs.
-- Représentation des compétitions.
-- Style visuel et niveau graphique final des mini-jeux.
-- Durée finale précise d'une partie.
-- Équilibre final entre adresse humaine, attributs et contexte.
+- Style visuel, caméra et niveau graphique final des mini-jeux.
+- Équilibre final entre geste humain, attributs, fatigue et pression.
+- Seuils du gardien, couverture du premier poteau et bloc défensif après tests manuels.
+- Nombre final et fréquence des Moments dans une carrière.
+- Durée finale précise d’une partie et niveau de détail des matchs simulés.
+- Postes, clubs, compétitions et règles simplifiées des championnats américain et saoudien.
 - Fiscalité et dépenses personnelles.
-- Nombre moyen et nombre final de Moments par carrière.
-- Niveau de détail des matchs simulés.
-- Règles simplifiées des championnats américain et saoudien.
-- Calibration des résultats de frappe, du gardien, des défenseurs, de la puissance et des conséquences futures.

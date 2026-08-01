@@ -4,7 +4,8 @@ export const DEFAULT_SHOT_WEIGHTS: ShotWeights = {
   playerAbility: 0.3,
   context: 0.15,
 }
-export const SHOT_SIMULATION_VERSION = 'shooting-v1'
+/** v1 reproductions are intentionally not preserved: no public career save exists yet. */
+export const SHOT_SIMULATION_VERSION = 'shooting-v2'
 export const clampUnit = (value: number): number =>
   Math.min(1, Math.max(0, value))
 export const normalizeShotWeights = (weights: ShotWeights): ShotWeights => {

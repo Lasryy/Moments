@@ -33,9 +33,13 @@ export interface ShotContext {
   readonly pressure: number
   readonly angleDifficulty: number
   readonly distance: number
-  readonly defenderCount: number
   readonly matchImportance: number
   readonly goalkeeperCoversNearPost: boolean
+}
+export interface ShotScenarioGeometry {
+  readonly ballStart: NormalizedPoint
+  readonly goalkeeperStart: NormalizedPoint
+  readonly defenderPositions: readonly NormalizedPoint[]
 }
 export interface ShotScenario {
   readonly id: string
@@ -43,11 +47,16 @@ export interface ShotScenario {
   readonly description: string
   readonly defaultPlayer: ShotPlayerProfile
   readonly context: ShotContext
+  readonly geometry: ShotScenarioGeometry
   readonly targetGuide: NormalizedPoint
 }
 export interface GoalkeeperDecision {
+  readonly startPosition: NormalizedPoint
   readonly diveDirection: 'left' | 'right' | 'stay'
-  readonly anticipationScore: number
+  readonly readWasCorrect: boolean
+  readonly reactionScore: number
+  readonly reachScore: number
+  readonly interceptionPoint: NormalizedPoint | null
   readonly reachesBall: boolean
 }
 export interface ShotResolution {
@@ -59,6 +68,8 @@ export interface ShotResolution {
   readonly targetPosition: NormalizedPoint
   readonly actualBallDestination: NormalizedPoint
   readonly goalkeeperDecision: GoalkeeperDecision
+  readonly defenderBlockPoint: NormalizedPoint | null
+  readonly postBounceDestination: NormalizedPoint | null
   readonly consequenceHint: SportingConsequenceHint
   readonly explanation: readonly string[]
 }
